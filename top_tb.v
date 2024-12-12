@@ -75,6 +75,63 @@ module tb_MFC_top;
         // Exit clock_set mode
         SPDT[14] = 0; // Deactivate clock_set
         #1_000_000;
+
+        ////////////////////////////////////////////////
+        // Test Stop Watch Mode
+        SPDT[12] = 1; // Activate stop_watch mode
+        #1_000_000;
+        
+        // Start stopwatch
+        button[4] = 1; // Start stopwatch
+        #1_000_000; // Wait for 1 second
+        button[4] = 0; // Stop stopwatch
+
+        // Wait for a few seconds
+        #1_000_000;
+        #1_000_000;
+
+        // Stop stopwatch
+        button[4] = 1; // re-start stopwatch
+        #1_000_000;
+        button[4] = 0; // stop stopwatch
+
+        // ** Test for Time Counter **
+        // Let time continue for a few seconds in normal mode
+        #1_000_000; // Observe counter
+        #1_000_000;
+        #1_000_000;
+
+        SPDT[12] = 1; // Activate stop_watch mode
+
+        // Test button filtering and edge detection
+        // Simulate noisy input for button[1] (decrement) rapidly
+        for(i = 0; i < 50; i = i + 1) begin
+            button[1] = ~button[1]; // Toggle button[1] rapidly
+            #10; // Wait 10ns (simulate noisy signal)
+        end
+
+        // Verify time decrement (button[1])
+        button[1] = 1; // Decrement time
+        #1_000_000; // Wait for 1 second
+        button[1] = 0;
+
+        // ** Test for clock set mode with boundary conditions **
+        SPDT[14] = 1; // Re-enter clock_set mode
+        #1_000_000;
+        
+        // Simulate boundary changes for time set
+        button[0] = 1; // Increment time (min01 or sec01)
+        #1_000_000;
+        button[0] = 0;
+
+        // ** Test for alarm set mode **
+        SPDT[13] = 1; // Enable alarm set
+        #1_000_000; // Wait for 1 second
+
+        // Stop test
+        SPDT[13] = 0; // Deactivate alarm set
+        #1_000_000; // Wait for 1 second
+
         #1_000_000;
         #1_000_000;
         #1_000_000;
