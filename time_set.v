@@ -4,7 +4,7 @@
 
 module time_set(
     // module control
-    input CLK,                  // 기본 클럭 (1s clk이 아닌, 그냥 clock)
+    input MCLK,                  // 기본 클럭 (1s clk이 아닌, 그냥 clock)
     input RESET,                // 리셋 신호
     input enable,               // 설정 모드 진입
 
@@ -41,7 +41,7 @@ module time_set(
     end
 
     //*********** location control ***********//
-    always @(posedge CLK or posedge RESET) begin
+    always @(posedge MCLK or posedge RESET) begin
         // reset
         if (RESET) begin
             location <= 2'b00;
@@ -65,7 +65,7 @@ module time_set(
     end
 
     //*********** value control ***********//
-    always @(posedge CLK or posedge RESET) begin
+    always @(posedge MCLK or posedge RESET) begin
         // reset
         if (RESET) begin
             update_min10 <= 0;
