@@ -22,29 +22,25 @@ assign alarm_on     = SPDT[11];
 assign miniGame     = SPDT[10:1];
 assign RESET        = SPDT[0];
 
-// button 신호를 나눠서 사용 // 아직 사용안함
-// assign inc      = button[0];
-// assign dec      = button[1];
-// assign left     = button[2];
-// assign right    = button[3];
-// assign center   = button[4];
-
 // 현재 시간 저장
 reg [3:0] min10;
 reg [3:0] min01;
 reg [3:0] sec10;
 reg [3:0] sec01;
 
-// 1초 클럭 생성 모듈
+// *********************** CLK generation *********************** //
+// generate 1s, 0.01s clock
 wire CLK1;
+wire CLK2;
 make_clk MAKE_CLK(
     .MCLK(MCLK),
     .RESET(RESET),
     .CLK1(CLK1), // 1s clock
-    .CLK2(/*blank*/) // 0.01s clock
+    .CLK2(CLK2) // 0.01s clock
 );
 
-// button input을 filtering 해주는 모듈
+// *********************** button filtering *********************** //
+// debouncing  + edge detection
 wire filtered_button[4:0];
 
 genvar i;
@@ -59,7 +55,7 @@ generate
     end
 endgenerate
 
-// 시간 1초씩 증가 - 시계 모듈
+// *********************** clock counter module *********************** //
 wire [3:0] next_min10;
 wire [3:0] next_min01;
 wire [3:0] next_sec10;
@@ -83,7 +79,7 @@ time_counter TIME_COUNTER(
     .next_sec01(next_sec01)
 );
 
-// 시간 새로 설정
+// *********************** time set module *********************** //
 wire [3:0] update_min10;
 wire [3:0] update_min01;
 wire [3:0] update_sec10;
@@ -115,6 +111,27 @@ time_set TIME_SETTING(
 
     // location
     .location(location)
+);
+
+
+// *********************** stop watch module *********************** //
+wire [3:0] stopwatchSEC_10;
+wire [3:0] stopwatchSEC_01;
+wire [3:0] stopwatchMSEC_10;
+wire [3:0] stopwatchMSEC_01;
+
+stopwatch STOPWATCH(
+    .CLK(MCLK), // master clock
+    .CLK2(CLK2), // 0.01s clock
+    .RESET(RESET),
+    .ENABLE(stop_watch),
+    .START_STOP(filtered_button[4]),
+
+    // output reg -> assign to display
+    .SEC_10 (stopwatchSEC_10 ),
+    .SEC_01 (stopwatchSEC_01 ),
+    .MSEC_10(stopwatchMSEC_10),
+    .MSEC_01(stopwatchMSEC_01)
 );
 
 // Feedback logic: Store outputs and pass them as inputs
