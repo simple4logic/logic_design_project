@@ -10,7 +10,7 @@ module make_clk(
 
     reg [26:0] clk1_counter;   // 1초짜리 clock용 카운터
     reg [19:0] clk2_counter;
-    parameter CLK1_COUNT = 27'd100000;  //27'd100_000_000; // 0.5초 (반주기)
+    parameter CLK1_COUNT = 27'd100_000;  //27'd100_000_000; // 0.5초 (반주기)
     parameter CLK2_COUNT = 20'd1000;    //20'd1_000_000;    // 0.005초 (반주기)
 
     always @(posedge MCLK or posedge RESET) begin
