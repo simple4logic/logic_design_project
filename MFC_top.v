@@ -223,9 +223,8 @@ minigame MINIGAME(
 
     //output
     .done(minigame_done),
-    .MINIGAME_0(minigame_0)
+    .MINIGAME_0(minigame_0) // minigame 실시간 score
 );
-
 
 
 // *********************** manage register (by top) *********************** //
