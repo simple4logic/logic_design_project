@@ -3,10 +3,14 @@
 module MFC_top(
     input MCLK, // board clk
     input [14:0] SPDT,
-    input [4:0] button // 0: inc, 1: dec, 2: left, 3: right, 4: center
+    input [4:0] button, // 0: inc, 1: dec, 2: left, 3: right, 4: center
+
+    output [3:0] ANODE,     // Active-low
+    output [6:0] SEG       // 7-segment output
+
     // output [27:0] display_total, // 7-segment display(7bit) * 4 = 28 bit
     // output [15:0] LED // 왼쪽부터 4개 / 10개 / 1개
-    );
+);
 
 // related to control
 wire clock_set, alarm_set, stop_watch, alarm_on;
@@ -39,6 +43,7 @@ make_clk MAKE_CLK(
     .CLK2(CLK2) // 0.01s clock
 );
 
+
 // *********************** button filtering *********************** //
 // debouncing  + edge detection
 wire filtered_button[4:0];
@@ -55,7 +60,7 @@ generate
     end
 endgenerate
 
-// *********************** clock counter module *********************** //
+// *********************** time counter module *********************** //
 wire [3:0] next_min10;
 wire [3:0] next_min01;
 wire [3:0] next_sec10;
@@ -128,8 +133,8 @@ stopwatch STOPWATCH(
     .START_STOP(filtered_button[4]),
 
     // output reg -> assign to display
-    .SEC_10 (stopwatchSEC_10 ),
-    .SEC_01 (stopwatchSEC_01 ),
+    .SEC_10 (stopwatchSEC_10),
+    .SEC_01 (stopwatchSEC_01),
     .MSEC_10(stopwatchMSEC_10),
     .MSEC_01(stopwatchMSEC_01)
 );
@@ -175,10 +180,13 @@ alarm_set ALARM_SET(
 );
 
 
+
 // *********************** Alarm detecting module *********************** //
 wire alarm_ringing; //알람 울림
 wire minigame_enable; //미니게임 활성화
 wire minigame_done; //미니게임 끝
+wire ring_condition;
+
 assign ring_condition = alarm_on & ~alarm_set;
 
 alarm_ring ALARM_RING(
@@ -204,14 +212,20 @@ alarm_ring ALARM_RING(
     .minigame_enable(minigame_enable) //먹스에 전달
 );
 
-//미니게임 (to-do)
+// *********************** minigame *********************** //
+wire [3:0] minigame_0;
+
 minigame MINIGAME(
     .MCLK(MCLK),
     .RESET(RESET),
     .enable(minigame_enable),
-    .button(button),
-    .done(minigame_done)
+    .button(filtered_button[4]),
+
+    //output
+    .done(minigame_done),
+    .MINIGAME_0(minigame_0)
 );
+
 
 
 // *********************** manage register (by top) *********************** //
@@ -254,16 +268,86 @@ always @(posedge MCLK or posedge RESET) begin
     end
 end
 
+// *********************** MUX *********************** //
+wire [3:0] SEL_3;
+wire [3:0] SEL_2;
+wire [3:0] SEL_1;
+wire [3:0] SEL_0;
 
-// 먹스 모듈 (현재 시각 전역변수 / 알람 세팅 화면 / 스탑워치 / 미니게임 4가지 경우)
+mux MUX(
+    .SPDT(SPDT),
 
-// BCD to 7seg 모듈
+    .TIME_3(min10),
+    .TIME_2(min01),
+    .TIME_1(sec10),
+    .TIME_0(sec01),
 
-// segment output 모듈
-// input : BCDto7seg에서 디스플레이 정보, 스위치 조합해서 blink enable, blink하는 로케이션
-// output : ANODE, SEG
+    .ALARM_3(alarm_min10),
+    .ALARM_2(alarm_min01),
+    .ALARM_1(alarm_sec10),
+    .ALARM_0(alarm_sec01),
 
-// LED output 모듈
+    .STOPWATCH_3(stopwatchSEC_10),
+    .STOPWATCH_2(stopwatchSEC_01),
+    .STOPWATCH_1(stopwatchMSEC_10),
+    .STOPWATCH_0(stopwatchMSEC_01),
+
+    .MINIGAME_ENABLE(minigame_enable),
+    .MINIGAME_0(minigame_0),
+
+    
+    //output
+    .SEL_3(SEL_3),
+    .SEL_2(SEL_2),
+    .SEL_1(SEL_1),
+    .SEL_0(SEL_0)
+);
+
+// *********************** BCDto7seg *********************** //
+wire [6:0] display_3;
+wire [6:0] display_2;
+wire [6:0] display_1;
+wire [6:0] display_0;
+
+
+bcdto7segment BCDTO7SEGMENT(
+    .BCD_3(SEL_3),
+    .BCD_3(SEL_2),
+    .BCD_3(SEL_1),
+    .BCD_3(SEL_0),
+
+    //output
+    .DISPLAY_3(display_3),
+    .DISPLAY_2(display_2),
+    .DISPLAY_1(display_1),
+    .DISPLAY_0(display_0)
+);
+
+
+// *********************** segment_display->blinkblink*********************** //
+
+segment_display SEGMENT_DISPLAY(
+    .MCLK(MCLK),
+    .DISPLAY_3(display_3),
+    .DISPLAY_2(display_2),
+    .DISPLAY_1(display_1),
+    .DISPLAY_0(display_0),
+
+    .clock_set(clock_set),
+    .alarm_set(alarm_set),
+    .alarm_ringing(alarm_ringing),
+
+    .location(location),
+    .alarm_location(alarm_location),
+
+    //output
+    .ANODE(ANODE),     // Active-low
+    .SEG(SEG)          // 7-segment output
+);
+
+
+
+// LED output 모듈  해야함
 // 알람일때 전체 점멸, 미니게임일때 미니게임 모듈의 출력
 
 endmodule

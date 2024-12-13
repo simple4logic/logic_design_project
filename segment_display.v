@@ -6,6 +6,7 @@ module segment_display(
     input [6:0] DISPLAY_2,
     input [6:0] DISPLAY_1,
     input [6:0] DISPLAY_0,
+    
     input clock_set,
     input alarm_set,
     input alarm_ringing,
