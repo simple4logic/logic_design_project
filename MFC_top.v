@@ -1,15 +1,17 @@
-`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Description  : TOP
+// Purpose      : Main module that connects all the modules together
+//////////////////////////////////////////////////////////////////////////////////
 
 module MFC_top(
     input MCLK, // board clk
     input [14:0] SPDT,
     input [4:0] button, // 0: inc, 1: dec, 2: left, 3: right, 4: center
 
-    output [3:0] ANODE,     // Active-low
-    output [6:0] SEG       // 7-segment output
 
-    // output [27:0] display_total, // 7-segment display(7bit) * 4 = 28 bit
-    // output [15:0] LED // 왼쪽부터 4개 / 10개 / 1개
+    output [3:0] ANODE,     // Active-low
+    output [6:0] SEG,       // 7-segment output
+    output [15:0] LED       // 총 16개 : 왼쪽에서부터 4개 mode / 10개 minigame / 1개 alarm ringing / 1개 CLK 
 );
 
 // related to control
@@ -18,7 +20,7 @@ wire clock_set, alarm_set, stop_watch, alarm_on;
 wire [9:0] miniGame;
 wire RESET;
 
-// SPDP 신호를 나눠서 사용
+// Separate SPDT signals
 assign clock_set    = SPDT[14];
 assign alarm_set    = SPDT[13];
 assign stop_watch   = SPDT[12];
@@ -26,7 +28,7 @@ assign alarm_on     = SPDT[11];
 assign miniGame     = SPDT[10:1];
 assign RESET        = SPDT[0];
 
-// 현재 시간 저장
+// current time value
 reg [3:0] min10;
 reg [3:0] min01;
 reg [3:0] sec10;
@@ -140,7 +142,6 @@ stopwatch STOPWATCH(
 );
 
 // *********************** Alarm time set module *********************** //
-// 설정한 알람 시간 저장용
 reg [3:0] alarm_min10;
 reg [3:0] alarm_min01;
 reg [3:0] alarm_sec10;
@@ -152,7 +153,7 @@ wire [3:0] alarm_update_sec10;
 wire [3:0] alarm_update_sec01;
 wire [1:0] alarm_location;
 
-alarm_set ALARM_SET(
+time_set ALARM_SETTING(
     .MCLK(MCLK),
     .RESET(RESET),
     .enable(alarm_set),
@@ -164,37 +165,34 @@ alarm_set ALARM_SET(
     .right  (filtered_button[3]),
 
     // input time (start from here)
-    .alarm_min10(alarm_min10),
-    .alarm_min01(alarm_min01),
-    .alarm_sec10(alarm_sec10),
-    .alarm_sec01(alarm_sec01),
+    .cur_min10(alarm_min10),
+    .cur_min01(alarm_min01),
+    .cur_sec10(alarm_sec10),
+    .cur_sec01(alarm_sec01),
 
     // output time
-    .alarm_update_min10(alarm_update_min10),
-    .alarm_update_min01(alarm_update_min01),
-    .alarm_update_sec10(alarm_update_sec10),
-    .alarm_update_sec01(alarm_update_sec01),
+    .update_min10(alarm_update_min10),
+    .update_min01(alarm_update_min01),
+    .update_sec10(alarm_update_sec10),
+    .update_sec01(alarm_update_sec01),
 
     // location
     .location(alarm_location)
 );
 
-
-
 // *********************** Alarm detecting module *********************** //
-wire alarm_ringing; //알람 울림
-wire minigame_enable; //미니게임 활성화
-wire minigame_done; //미니게임 끝
+wire alarm_ringing;     // alarm enable signal (when alarm time == current time)
+wire minigame_enable;   // enter minigame signal
+wire minigame_done;     // check if game is done
 wire ring_condition;
-
 assign ring_condition = alarm_on & ~alarm_set;
 
 alarm_ring ALARM_RING(
     // input
     .MCLK(MCLK),
     .RESET(RESET),
-    .enable(ring_condition), //스위치
-    .button(filtered_button[4]), // 미니게임 넘어가는 버튼
+    .enable(ring_condition),
+    .button(filtered_button[4]), // center button -> to enter minigame
     .minigame_done(minigame_done),
     
     // input - data of time
@@ -208,27 +206,33 @@ alarm_ring ALARM_RING(
     .alarm_sec01(alarm_sec01),
 
     // output
-    .alarm_ringing(alarm_ringing),    // blink 정보. 디스플레이에 전달
-    .minigame_enable(minigame_enable) //먹스에 전달
+    .alarm_ringing(alarm_ringing),    // give info : blink or not
+    .minigame_enable(minigame_enable)
 );
 
 // *********************** minigame *********************** //
-wire [3:0] minigame_0;
+wire [3:0] minigame_score;
+wire [9:0] minigame_LED;
 
 minigame MINIGAME(
+    // inputs
     .MCLK(MCLK),
     .RESET(RESET),
     .enable(minigame_enable),
-    .button(filtered_button[4]),
+
+    // game control input
+    .SPDT(SPDT[10:1]),
+    .seed(sec01),
 
     //output
     .done(minigame_done),
-    .MINIGAME_0(minigame_0) // minigame 실시간 score
+    .score(minigame_score), // minigame score, 0~4
+    .LED(minigame_LED)
 );
 
 
 // *********************** manage register (by top) *********************** //
-// Feedback logic: Store outputs and pass them as inputs
+// current time feedback logic
 always @(posedge MCLK or posedge RESET) begin
     if (RESET) begin
         // clock reset
@@ -236,36 +240,45 @@ always @(posedge MCLK or posedge RESET) begin
         min01 <= 4'd0;
         sec10 <= 4'd0;
         sec01 <= 4'd0;
+    end
 
-        // alarm reset
+    else begin
+        // when in clock set mode
+        if (clock_set) begin
+            min10 <= update_min10;
+            min01 <= update_min01;
+            sec10 <= update_sec10;
+            sec01 <= update_sec01;
+        end
+        // normal mode (counting clock)
+        else begin
+            min10 <= next_min10;
+            min01 <= next_min01;
+            sec10 <= next_sec10;
+            sec01 <= next_sec01;
+        end
+    end
+end
+
+// alarm feedback logic
+always @(posedge MCLK or posedge RESET) begin
+    if (RESET) begin
         alarm_min10 <= 4'd0;
         alarm_min01 <= 4'd0;
         alarm_sec10 <= 4'd0;
         alarm_sec01 <= 4'd0;
     end
     
-    // who will access global clock?
-    else if (clock_set) begin // when clock set mode
-        min10 <= update_min10;
-        min01 <= update_min01;
-        sec10 <= update_sec10;
-        sec01 <= update_sec01;
-    end
-    else begin // when normal counter mode
-        min10 <= next_min10;
-        min01 <= next_min01;
-        sec10 <= next_sec10;
-        sec01 <= next_sec01;
-    end
-
-    // allow access to global alarm or not
-    if (alarm_set) begin
-        alarm_min10 <= alarm_update_min10;
-        alarm_min01 <= alarm_update_min01;
-        alarm_sec10 <= alarm_update_sec10;
-        alarm_sec01 <= alarm_update_sec01;
+    else begin
+        if (alarm_set) begin
+            alarm_min10 <= alarm_update_min10;
+            alarm_min01 <= alarm_update_min01;
+            alarm_sec10 <= alarm_update_sec10;
+            alarm_sec01 <= alarm_update_sec01;
+        end
     end
 end
+
 
 // *********************** MUX *********************** //
 wire [3:0] SEL_3;
@@ -274,6 +287,7 @@ wire [3:0] SEL_1;
 wire [3:0] SEL_0;
 
 mux MUX(
+    // inputs
     .SPDT(SPDT),
 
     .TIME_3(min10),
@@ -292,10 +306,9 @@ mux MUX(
     .STOPWATCH_0(stopwatchMSEC_01),
 
     .MINIGAME_ENABLE(minigame_enable),
-    .MINIGAME_0(minigame_0),
-
+    .MINIGAME_0(minigame_score),
     
-    //output
+    // outputs
     .SEL_3(SEL_3),
     .SEL_2(SEL_2),
     .SEL_1(SEL_1),
@@ -311,9 +324,9 @@ wire [6:0] display_0;
 
 bcdto7segment BCDTO7SEGMENT(
     .BCD_3(SEL_3),
-    .BCD_3(SEL_2),
-    .BCD_3(SEL_1),
-    .BCD_3(SEL_0),
+    .BCD_2(SEL_2),
+    .BCD_1(SEL_1),
+    .BCD_0(SEL_0),
 
     //output
     .DISPLAY_3(display_3),
@@ -326,7 +339,9 @@ bcdto7segment BCDTO7SEGMENT(
 // *********************** segment_display->blinkblink*********************** //
 
 segment_display SEGMENT_DISPLAY(
+    // inputs
     .MCLK(MCLK),
+    .RESET(RESET),
     .DISPLAY_3(display_3),
     .DISPLAY_2(display_2),
     .DISPLAY_1(display_1),
@@ -335,7 +350,6 @@ segment_display SEGMENT_DISPLAY(
     .clock_set(clock_set),
     .alarm_set(alarm_set),
     .alarm_ringing(alarm_ringing),
-
     .location(location),
     .alarm_location(alarm_location),
 
@@ -344,10 +358,22 @@ segment_display SEGMENT_DISPLAY(
     .SEG(SEG)          // 7-segment output
 );
 
+// *********************** LED *********************** //
 
+LED_display LED_DISPLAY(
+    // inputs
+    .MCLK(MCLK),
+    .CLK1(CLK1),
+    .RESET(RESET),
 
-// LED output 모듈  해야함
-// 알람일때 전체 점멸, 미니게임일때 미니게임 모듈의 출력
+    .MODE(SPDT[14:11]), // mode 4bit
+    .minigame(minigame_LED),
+    .alarm_ringing(alarm_ringing),
+
+    // outputs
+    .LED(LED)
+);
+
 
 endmodule
 
