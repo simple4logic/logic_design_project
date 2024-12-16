@@ -1,75 +1,69 @@
 //////////////////////////////////////////////////////////////////////////////////
-// Description : Clock time set
+// Description : Stopwatch Module
+// Purpose     : Implements a stopwatch with 1Hz and 100Hz clock inputs.
 //////////////////////////////////////////////////////////////////////////////////
 
 module stopwatch(
-    input CLK,                 // 1Hz 클럭 입력 (1초마다)
-    input CLK2,                 // 100Hz 클럭 입력 (0.01초마다)
-    input RESET,                // 리셋 신호 (active high)
-    input START_STOP,           // 시작/정지 버튼 입력 (button[4])
-    input ENABLE,               // SPDT 스톱워치 신호
+    input CLK,                 // 1Hz clock input (ticks every second)
+    input CLK2,                // 100Hz clock input (ticks every 0.01 seconds)
+    input RESET,               // Reset signal (active high)
+    input START_STOP,          // Start/Stop button input (button[4], debounced, single-cycle pulse)
+    input ENABLE,              // Stopwatch enable signal
 
-    output reg [3:0] SEC_10,        // 10초 단위
-    output reg [3:0] SEC_01,        // 1초 단위
-    output reg [3:0] MSEC_10,       // 10/100초 단위
-    output reg [3:0] MSEC_01        // 1/100초 단위
+    output reg [3:0] SEC_10,   // 10 seconds digit
+    output reg [3:0] SEC_01,   // 1 second digit
+    output reg [3:0] MSEC_10,  // 10/100 milliseconds digit
+    output reg [3:0] MSEC_01   // 1/100 milliseconds digit
 );
 
-    // 내부 레지스터 선언
-    reg [6:0] sec;               // 초 단위 (0~99)
-    reg [6:0] msec;              // 1/100초 단위 (0~99)
-    reg running;                 // 스톱워치 동작 상태 (1: 동작 중, 0: 정지)
-    reg prev_button;             // 이전 버튼 상태 (엣지 검출용)
+    // Internal register declarations
+    reg [6:0] sec;               // Seconds counter (0~99)
+    reg [6:0] msec;              // Milliseconds counter (0~99)
+    reg running;                 // Stopwatch running state (1: running, 0: stopped)
 
-    
     /////////////////////////////////////////////////////////////////
-    // 시작/정지 버튼 처리 블록
+    // Start/Stop Button Handling and Stopwatch State Management
     /////////////////////////////////////////////////////////////////
+    // Use the 1Hz clock to toggle the running state to prevent multiple toggles
     always @(posedge CLK or posedge RESET) begin
-        if(RESET) begin
-            running     <= 0;       // 스톱워치 정지
-            prev_button <= 0;       // 이전 버튼 상태 초기화
-            sec         <= 0;       // 분 정보 초기화   
-            msec        <= 0;       // 초 정보 초기화
+        if (RESET) begin
+            running <= 0;       // Stop stopwatch on reset
         end
+        
         else begin
             if (!ENABLE) begin
-                // ENABLE이 0인 경우
-                running <= 0;               // 스톱워치 정지
-                prev_button <= 0;           // 이전 버튼 상태 초기화
-                sec <= 0;                   // 분 정보 초기화
-                msec <= 0;                  // 초 정보 초기화
+                running <= 0;   // Stop stopwatch if ENABLE is 0
             end
             else begin
-                if (START_STOP && !prev_button) begin
-                    running <= ~running; // 스톱워치 동작 상태 토글
+                if (START_STOP) begin
+                    running <= ~running; // Toggle running state on button pulse
                 end
-                else begin
-                    running <= running;  // 상태 유지
-                end
-                prev_button <= START_STOP; // 현재 버튼 상태를 이전 상태로 저장
             end
-        end 
+        end
     end
 
     /////////////////////////////////////////////////////////////////
-    // 시간 증가 로직 블록
+    // Time Increment Logic Block
     /////////////////////////////////////////////////////////////////
+    // Use the 100Hz clock to increment the milliseconds and seconds counters
     always @(posedge CLK2 or posedge RESET) begin
-        if (!ENABLE || RESET) begin
-            // ENABLE이 0이거나 RESET이 1
-            msec <= 0;                   // 1/100초 단위 초기화
-            sec  <= 0;                   // 초 단위 초기화
+        if (RESET || !ENABLE) begin
+            // Reset or disable the stopwatch
+            msec <= 0;                   // Reset milliseconds
+            sec  <= 0;                   // Reset seconds
+
+            // Update outputs immediately on reset
+            sec  <= 4'd0;
+            msec <= 4'd0;
         end
         else begin
             if (running) begin
-                if (sec == 99 && msec == 99) begin //99:99 도달
-                    msec <= msec;
-                    sec  <= sec;
+                if (sec == 99 && msec == 99) begin
+                    // Reached maximum time (99:99), do not increment further
+                    // Optionally, you can set a flag or trigger an event here
                 end
                 else if (msec < 99) begin
                     msec <= msec + 1;
-                    sec  <= sec;          // sec 유지
                 end
                 else begin
                     msec <= 0;
@@ -77,21 +71,19 @@ module stopwatch(
                         sec <= sec + 1;
                     end
                     else begin
-                        sec <= 99;       // sec를 99로 고정하여 더 이상 증가하지 않음
+                        sec <= 99;       // Fix seconds at 99
                     end
                 end
             end
-            else begin
-                msec <= msec;              // msec 상태 유지
-                sec  <= sec;               // sec 상태 유지
-            end
+            // If not running, maintain current time (no changes to sec and msec)
+            
+            // BCD Conversion for seconds and milliseconds
+
         end
+        SEC_10  <= sec / 10;            // Tens place of seconds
+        SEC_01  <= sec % 10;            // Ones place of seconds
+        MSEC_10 <= msec / 10;           // Tens place of milliseconds
+        MSEC_01 <= msec % 10;           // Ones place of milliseconds
     end
-
-
-    assign SEC_10  = sec / 10;            // 10초 단위 계산
-    assign SEC_01  = sec % 10;            // 1초 단위 계산
-    assign MSEC_10 = msec / 10;           // 10/100초 단위 계산
-    assign MSEC_01 = msec % 10;           // 1/100초 단위 계산
 
 endmodule
