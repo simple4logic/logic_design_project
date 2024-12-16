@@ -1,164 +1,179 @@
-//////////////////////////////////////////////////////////////////////////////////
-// Description : Clock time set
-//////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+// Description : Clock Time Set Module
+// Purpose     : Allows setting of minutes and seconds using increment, decrement,
+//               left, and right buttons.
+////////////////////////////////////////////////////////////////////////////////
 
 module time_set(
-    // module control
-    input MCLK,                  // 기본 클럭 (1s clk이 아닌, 그냥 clock)
-    input RESET,                // 리셋 신호
-    input enable,               // 설정 모드 진입
+    input MCLK,                   // Main clock
+    input RESET,                  // Reset signal
+    input enable,                 // Enable signal for setting mode
 
-    // button control
-    input inc,                  // 증가 버튼
-    input dec,                  // 감소 버튼
-    input left,                 // 왼쪽 버튼
-    input right,                // 오른쪽 버튼
+    // Button control
+    input inc,                    // Increment button
+    input dec,                    // Decrement button
+    input left,                   // Move left button
+    input right,                  // Move right button
 
-    // init time (current time)
-    input [3:0] cur_min10,          // 10분 단위
-    input [3:0] cur_min01,          // 01분 단위
-    input [3:0] cur_sec10,          // 10초 단위
-    input [3:0] cur_sec01,          // 01초 단위
+    // Current time inputs
+    input [3:0] cur_min10,        // Tens place of minutes
+    input [3:0] cur_min01,        // Ones place of minutes
+    input [3:0] cur_sec10,        // Tens place of seconds
+    input [3:0] cur_sec01,        // Ones place of seconds
 
-    // output - actual time value
-    output reg [3:0] update_min10,   // 10분 단위
-    output reg [3:0] update_min01,   // 01분 단위
-    output reg [3:0] update_sec10,   // 10초 단위
-    output reg [3:0] update_sec01,    // 01초 단위
-    // current location
-    // [00, 01, 10, 11] from left to right
-    output reg [1:0] location // 설정할 segment 위치
+    // Output - Updated time values
+    output reg [3:0] update_min10,
+    output reg [3:0] update_min01,
+    output reg [3:0] update_sec10,
+    output reg [3:0] update_sec01,
+    output reg [1:0] location      // Current digit being configured
 );
-    // 임시 변수로 저장
-    reg [4:0] _min10, _min01, _sec10, _sec01;
 
-    //*********** time init before set ***********//
-    always @(posedge enable) begin
-        _min10 <= cur_min10;
-        _min01 <= cur_min01;
-        _sec10 <= cur_sec10;
-        _sec01 <= cur_sec01;
-    end
+    // Temporary registers for internal manipulation
+    reg [3:0] _min10, _min01, _sec10, _sec01;
+    reg prev_enable;                // Previous state of enable for edge detection
 
-    //*********** location control ***********//
+    //*********** Initialize and Value Control ***********//
     always @(posedge MCLK or posedge RESET) begin
-        // reset
         if (RESET) begin
-            location <= 2'b00;
-        end
-
-        // 설정 모드 진입 시
-        else if (enable) begin // enable == 1
-            if (left && location > 2'b00) begin
-                location <= location - 1;
+            // Reset all internal registers
+            _min10       <= 4'd0;
+            _min01       <= 4'd0;
+            _sec10       <= 4'd0;
+            _sec01       <= 4'd0;
+            prev_enable  <= 1'b0;
+        end 
+        else begin
+            // Detect rising edge of enable signal
+            if (~prev_enable & enable) begin
+                // Load current time into temporary registers on enable rising edge
+                _min10 <= cur_min10;
+                _min01 <= cur_min01;
+                _sec10 <= cur_sec10;
+                _sec01 <= cur_sec01;
             end
 
-            if (right && location < 2'b11) begin
-                location <= location + 1;
-            end
-        end
+            // Modify based on location and button inputs only when enabled
+            if (enable) begin
+                case (location)
+                    2'b11: begin // 10-minute digit (0-5)
+                        if (inc) begin
+                            if (_min10 == 5) begin
+                                _min10 <= 0;  // Wrap around to 0
+                            end 
+                            else begin
+                                _min10 <= _min10 + 1;  // Increment
+                            end
+                        end
+                        if (dec) begin
+                            if (_min10 == 0) begin
+                                _min10 <= 5;  // Wrap around to 5
+                            end 
+                            else begin
+                                _min10 <= _min10 - 1;  // Decrement
+                            end
+                        end
+                    end
 
-        // enable 끌 때 초기화
-        else begin // when enable == 0
-            location <= 2'b00;
+                    2'b10: begin // 1-minute digit (0-9)
+                        if (inc) begin
+                            if (_min01 == 9) begin
+                                _min01 <= 0;  // Wrap around to 0
+                            end 
+                            else begin
+                                _min01 <= _min01 + 1;  // Increment
+                            end
+                        end
+                        if (dec) begin
+                            if (_min01 == 0) begin
+                                _min01 <= 9;  // Wrap around to 9
+                            end 
+                            else begin
+                                _min01 <= _min01 - 1;  // Decrement
+                            end
+                        end
+                    end
+
+                    2'b01: begin // 10-second digit (0-5)
+                        if (inc) begin
+                            if (_sec10 == 5) begin
+                                _sec10 <= 0;  // Wrap around to 0
+                            end 
+                            else begin
+                                _sec10 <= _sec10 + 1;  // Increment
+                            end
+                        end
+                        if (dec) begin
+                            if (_sec10 == 0) begin
+                                _sec10 <= 5;  // Wrap around to 5
+                            end 
+                            else begin
+                                _sec10 <= _sec10 - 1;  // Decrement
+                            end
+                        end
+                    end
+
+                    2'b00: begin // 1-second digit (0-9)
+                        if (inc) begin
+                            if (_sec01 == 9) begin
+                                _sec01 <= 0;  // Wrap around to 0
+                            end 
+                            else begin
+                                _sec01 <= _sec01 + 1;  // Increment
+                            end
+                        end
+                        if (dec) begin
+                            if (_sec01 == 0) begin
+                                _sec01 <= 9;  // Wrap around to 9
+                            end 
+                            else begin
+                                _sec01 <= _sec01 - 1;  // Decrement
+                            end
+                        end
+                    end
+                endcase
+            end
+
+            // Update previous enable state for next cycle
+            prev_enable <= enable;
         end
     end
 
-    //*********** value control ***********//
+    //*********** Location Control ***********//
     always @(posedge MCLK or posedge RESET) begin
-        // reset
         if (RESET) begin
-            update_min10 <= 0;
-            update_min01 <= 0;
-            update_sec10 <= 0;
-            update_sec01 <= 0;
+            location <= 2'b00; // Default to 10-minute digit (most left)
         end
-
-        // 설정 모드 진입 시
         else if (enable) begin
-            case (location)
-                2'b00: begin // 10분 단위 // max = 5
-                    if (inc) begin
-                        if (_min10 == 5) begin
-                            _min10 <= 0;  // 최대값을 넘으면 0으로 초기화
-                        end 
-                        else begin
-                            _min10 <= _min10 + 1;  // 증가
-                        end
-                    end
-                    if (dec) begin
-                        if (_min10 == 0) begin
-                            _min10 <= 5;  // 최대값을 넘으면 0으로 초기화
-                        end 
-                        else begin
-                            _min10 <= _min10 - 1;  // 감소
-                        end
-                    end
-                end
+            if (left && location < 2'b11) begin
+                location <= location + 1; // Move to left digit
+            end
 
-                2'b01: begin // 1분 단위
-                    if (inc) begin
-                        if (_min01 == 9) begin
-                            _min01 <= 0;  // 최대값을 넘으면 0으로 초기화
-                        end 
-                        else begin
-                            _min01 <= _min01 + 1;  // 증가
-                        end
-                    end
-                    if (dec) begin
-                        if (_min01 == 0) begin
-                            _min01 <= 4'd9;  // 최대값을 넘으면 0으로 초기화
-                        end 
-                        else begin
-                            _min01 <= _min01 - 1;  // 증가
-                        end
-                    end
-                end
+            if (right && location > 2'b00) begin
+                location <= location - 1; // Move to right digit
+            end
+        end
+        else begin
+            location <= 2'b00; // Reset to default when not enabled
+        end
+    end
 
-                2'b10: begin // 10초 단위 // max = 5
-                    if (inc) begin
-                        if (_sec10 == 5) begin
-                            _sec10 <= 0;  // 최대값을 넘으면 0으로 초기화
-                        end 
-                        else begin
-                            _sec10 <= _sec10 + 1;  // 증가
-                        end
-                    end
-                    if (dec) begin
-                        if (_sec10 == 0) begin
-                            _sec10 <= 5;  // 최대값을 넘으면 0으로 초기화
-                        end 
-                        else begin
-                            _sec10 <= _sec10 - 1;  // 증가
-                        end
-                    end
-                end
-
-                2'b11: begin // 1초 단위
-                    if (inc) begin
-                        if (_sec01 == 9) begin
-                            _sec01 <= 0;  // 최대값을 넘으면 0으로 초기화
-                        end 
-                        else begin
-                            _sec01 <= _sec01 + 1;  // 증가
-                        end
-                    end
-                    if (dec) begin
-                        if (_sec01 == 0) begin
-                            _sec01 <= 9;  // 최대값을 넘으면 0으로 초기화
-                        end 
-                        else begin
-                            _sec01 <= _sec01 - 1;  // 감소
-                        end
-                    end
-                end
-            endcase
-
-            // 결과 저장
+    //*********** Update Outputs ***********//
+    always @(posedge MCLK or posedge RESET) begin
+        if (RESET) begin
+            // Reset all output registers
+            update_min10 <= 4'd0;
+            update_min01 <= 4'd0;
+            update_sec10 <= 4'd0;
+            update_sec01 <= 4'd0;
+        end 
+        else begin
+            // Update output registers with temporary values
             update_min10 <= _min10;
             update_min01 <= _min01;
             update_sec10 <= _sec10;
             update_sec01 <= _sec01;
         end
     end
+
 endmodule
